@@ -1,0 +1,224 @@
+name: Create dummy packages to test action actions/delete-package-versions
+on:
+  workflow_dispatch:
+    inputs:
+      package-name:
+        default: gmzwinge-test-package
+      prerelease-id1:
+        default: test1
+      prerelease-id2:
+        default: test2
+run-name: |-
+  ${{ format('Creating dummy packages including prerelease id {0} and {1}', inputs.prerelease-id1, inputs.prerelease-id2) }}
+permissions:
+  packages: write
+jobs:
+  create-test-packages:
+    runs-on: ubuntu-latest
+    steps:
+      #
+      - uses: actions/setup-node@v4
+        with:
+          # Set registry and auth to read in from environment variable NODE_AUTH_TOKEN
+          # in /home/runner/work/_temp/.npmrc.
+          registry-url: https://npm.pkg.github.com/
+          # Not sure when this is required. The https://github.com/actions/setup-node#readme says that is it used
+          # `to pull node distributions from https://github.com/actions/node-versions.` But it's a public repo.
+          # So I don't see why it would use it. It also says `Since there's a default, this is typically not supplied by the user.`
+          # Could it be used to avoid `rate limits`?
+          #token: ${{ secrets.GITHUB_TOKEN }}
+        #env:
+        #  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #- run: cat '${{ NPM_CONFIG_USERCONFIG }}'
+      - run: cat '/home/runner/work/_temp/.npmrc'
+      #
+      # This is to avoid having a section like this with each `npm publish`.
+      #    env:
+      #      NODE_AUTH_TOKEN: ${{ secrets.TOKEN_PACKAGES_WRITE }}
+      # or
+      #      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Note: GITHUB_TOKEN requires packages permissions set to write.
+      - run: echo "NODE_AUTH_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_ENV"
+      #
+      #- run: npm init --yes
+      #- run: npm init @.../gmzwinge-testing-delete-branch-version --yes
+      # This may not work because the scope should be all lower case and the github.repository_owner
+      # may have mixed case.
+      #- run: npm init --scope @${{ github.repository_owner }} --yes
+      # This works:
+      #- run: npm init --scope @rockwell-automation-ftds --yes
+      # From [Github Actions: Repository name must be lowercase](https://github.com/orgs/community/discussions/27086):
+      - name: set lower case owner name
+        run: |
+          echo "OWNER_LC=${OWNER,,}" >>${GITHUB_ENV}
+        env:
+          OWNER: '${{ github.repository_owner }}'
+      #
+      # Create package.json and publish it.
+      # `npm init` uses the parent folder name for the package name.
+      - run: mkdir '${{ inputs.package-name }}'
+      - run: npm init --scope @${{ env.OWNER_LC }} --yes
+        working-directory: ${{ inputs.package-name }}
+      - run: mv '${{ inputs.package-name }}/package.json' .
+      - run: npm publish
+        # Continue if package already exists.
+        continue-on-error: true
+      #
+      # Try to repro package version 0.0.10-applyingtemplate.7 not being deleted in
+      # https://github.com/Rockwell-Automation-FTDS/gmzwinge-test/pkgs/npm/gmzwinge-test/versions
+      # when surounded by versions 0.0.8, 0.0.9, 0.0.10, 0.0.11.
+      - run: echo npm version 0.0.1
+      - run: npm version 0.0.1
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 0.0.2
+      - run: npm version patch
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 0.0.3-${{ inputs.prerelease-id1 }}.0
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 0.0.3
+      - run: npm version patch
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 0.0.10
+      - run: npm version 0.0.10
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 0.0.11-${{ inputs.prerelease-id1 }}.0
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 10.0.10
+      - run: npm version 0.0.10
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 10.0.11-${{ inputs.prerelease-id1 }}.0
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.1
+      # Increment patch version:
+      - run: npm version patch
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.1-${{ inputs.prerelease-id1 }}.0
+      # With version 1.0.1, `npm version prerelease ...` result in `1.0.2-patch1.0`: the patch is incremented
+      # before adding the prerelease id.
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      # Note: must first revert to version 1.0.0 for `npm version prerelease ...` to give `1.0.1-patch1.0`.
+      # It doesn't seem that raver.yml does that. TODO: why is that? Is one better than the other?
+      - run: npm version 1.0.0
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.1-${{ inputs.prerelease-id1 }}.1
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.1-${{ inputs.prerelease-id1 }}.2
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.2
+      # Goes from 1.0.1-patch1.2 to 1.0.1.
+      - run: npm version patch
+      # Goes from 1.0.1 to 1.0.2.
+      - run: npm version patch
+      - run: npm publish
+        continue-on-error: true
+      #
+      # Test if package with prerelease id on difference major.minor.patch all get deleted.
+      - run: echo npm version 1.0.2-${{ inputs.prerelease-id1 }}.0
+      # Same as `npm version prerelease ...` above.
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      # Same as `npm version 1.0.1` above.
+      - run: npm version 1.0.1
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.2-${{ inputs.prerelease-id2 }}.0
+      # Same as `npm version prerelease ...` above.
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      # Same as `npm version 1.0.1` above.
+      - run: npm version 1.0.1
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.2-${{ inputs.prerelease-id2 }}.2
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.0.2-${{ inputs.prerelease-id2 }}.5
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id2 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 1.1.0
+      - run: npm version minor
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 2.0.0
+      - run: npm version major
+      - run: npm publish
+        continue-on-error: true
+      #
+      - run: echo npm version 4.0.0
+      - run: npm version major
+      - run: npm version major
+      - run: npm publish
+        continue-on-error: true
+      #
+      # Packages with more than one digit.
+      - run: echo npm version 0.0.10
+      - run: npm version 0.0.10
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 0.0.11-${{ inputs.prerelease-id1 }}.0
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 10.0.10
+      - run: npm version 10.0.10
+      - run: npm publish
+        continue-on-error: true
+      - run: echo npm version 10.0.11-${{ inputs.prerelease-id1 }}.0
+      - run: npm version prerelease --preid=${{ inputs.prerelease-id1 }}
+      - run: npm publish
+        continue-on-error: true
+      #
+      # Show how semver increments:
+      # Note: incrementing prerelease for version 1.2.3 result in version 
+      - run: npm install semver
+      # 2.0.0:
+      - run: npx semver --increment major --preid abcd 1.2.3
+      # 1.3.0:
+      - run: npx semver --increment minor --preid abcd 1.2.3
+      # 1.2.4:
+      - run: npx semver --increment patch --preid abcd 1.2.3
+      # 2.0.0-abcd.0:
+      - run: npx semver --increment premajor --preid abcd 1.2.3
+      # 1.3.0-abcd.0:
+      - run: npx semver --increment preminor --preid abcd 1.2.3
+      # 1.2.4-abcd.0:
+      - run: npx semver --increment prepatch --preid abcd 1.2.3
+      # 1.2.4-abcd.0 (note: same as prepatch):
+      - run: npx semver --increment prerelease --preid abcd 1.2.3
+      # 1.2.5-abcd.0:
+      - run: npx semver --increment prepatch --preid abcd 1.2.4-abcd.0
+      # 1.2.4-abcd.1:
+      - run: npx semver --increment prerelease --preid abcd 1.2.4-abcd.0

@@ -1,0 +1,41 @@
+# Test PR https://github.com/actions/delete-package-versions/pull/114
+name: Test action Delete Package Versions
+on:
+  workflow_dispatch:
+    inputs:
+      regex:
+        type: choice
+        options:
+          - old-regex
+          - new-regex
+        required: true
+      dry-run:
+        type: boolean
+        default: true
+run-name: 'regex: ${{ inputs.regex }}, dry-run: ${{ inputs.dry-run }}.'
+jobs:
+  test-delete-package-versions:
+    permissions:
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      #- uses: actions/delete-package-versions@v5
+      # Use actions from PR with dry-run capability https://github.com/actions/delete-package-versions/pull/119
+      - uses: vpipkt/delete-package-versions@feat/dry-run
+        if: ${{ inputs.regex == 'old-regex' }}
+        with:
+          dry-run: ${{ inputs.dry-run }}
+          package-name: 'gmzwinge-test-package'
+          package-type: 'npm'
+          min-versions-to-keep: 3
+          ignore-versions: '^(0|[1-9]\\d*)\\.0\\.0$'
+      #- uses: actions/delete-package-versions@v5
+      # Use actions from PR with dry-run capability https://github.com/actions/delete-package-versions/pull/119
+      - uses: vpipkt/delete-package-versions@feat/dry-run
+        if: ${{ inputs.regex == 'new-regex' }}
+        with:
+          dry-run: ${{ inputs.dry-run }}
+          package-name: 'gmzwinge-test-package'
+          package-type: 'npm'
+          min-versions-to-keep: 3
+          ignore-versions: '^(0|[1-9]\d*)\.0\.0$'
